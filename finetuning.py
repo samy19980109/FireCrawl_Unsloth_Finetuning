@@ -173,8 +173,8 @@ def parse_args() -> argparse.Namespace:
                         help="Path to ShareGPT JSONL dataset (default: ./output/dataset_sharegpt.jsonl)")
 
     # Model
-    parser.add_argument("--model", default="unsloth/Llama-3.2-1B-Instruct-bnb-4bit",
-                        help="Base model ID from HF or Unsloth (default: unsloth/Llama-3.2-1B-Instruct-bnb-4bit)")
+    parser.add_argument("--model", default="unsloth/gpt-oss-20b-unsloth-bnb-4bit",
+                        help="Base model ID from HF or Unsloth (default: unsloth/gpt-oss-20b-unsloth-bnb-4bit)")
     parser.add_argument("--max-seq-length", type=int, default=2048,
                         help="Max sequence length (default: 2048)")
     parser.add_argument("--chat-template", default="chatml",

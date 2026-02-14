@@ -1,15 +1,14 @@
 # Fine-Tuning on RunPod — Step-by-Step Guide
 
-This guide walks through the complete workflow: spinning up a GPU pod on RunPod, generating a dataset with `main.py`, and fine-tuning a model with `finetuning.py`.
+Run LoRA fine-tuning on a RunPod GPU pod using a dataset you generated locally with `main.py`.
 
 ---
 
 ## Prerequisites
 
+- A `dataset_sharegpt.jsonl` file generated locally by `main.py`
 - A [RunPod](https://www.runpod.io) account with credits or a payment method
-- A [Firecrawl API key](https://firecrawl.dev)
-- An [OpenAI API key](https://platform.openai.com)
-- (Optional) A [Hugging Face](https://huggingface.co) account + token if you want to push your model to the Hub
+- (Optional) A [Hugging Face](https://huggingface.co) account + token to push your model to the Hub
 
 ---
 
@@ -25,7 +24,7 @@ This guide walks through the complete workflow: spinning up a GPU pod on RunPod,
    | RTX A5000 / A40 | 24–48 GB | 3B–8B models |
    | A100 (40/80 GB) | 40–80 GB | 8B+ models |
 
-   > For `unsloth/Llama-3.2-1B-Instruct-bnb-4bit` (the default), a 16 GB GPU is sufficient.
+   > For `unsloth/gpt-oss-20b-unsloth-bnb-4bit` (the default), a 16 GB GPU is sufficient (14 GB VRAM with QLoRA).
 
 4. Under **Pod Template**, select the official **RunPod PyTorch** template (comes with PyTorch, CUDA, and Python pre-installed)
 5. Configure storage:
@@ -39,8 +38,6 @@ This guide walks through the complete workflow: spinning up a GPU pod on RunPod,
 
 ## Step 2 — Connect to Your Pod
 
-You have two options:
-
 ### Option A — JupyterLab (easiest)
 
 1. Once the pod is running, click **Connect**
@@ -53,8 +50,6 @@ You have two options:
 2. Copy the SSH command shown (looks like `ssh root@<ip> -p <port> -i ~/.ssh/id_ed25519`)
 3. Run it in your local terminal
 
-> Both options give you a root shell. All subsequent steps are run in this terminal.
-
 ---
 
 ## Step 3 — Clone the Repo and Install Dependencies
@@ -63,11 +58,6 @@ You have two options:
 cd /workspace
 git clone <your-repo-url> firecrawl_finetuning
 cd firecrawl_finetuning
-```
-
-Install the Python dependencies:
-
-```bash
 pip install -r requirements.txt
 ```
 
@@ -75,66 +65,41 @@ pip install -r requirements.txt
 
 ---
 
-## Step 4 — Set Up Environment Variables
+## Step 4 — Upload Your Dataset
+
+Upload the `dataset_sharegpt.jsonl` you generated locally on your machine.
+
+### Option A — JupyterLab file browser
+
+1. In JupyterLab, navigate to `/workspace/firecrawl_finetuning/output/`
+2. Create the `output` folder if it doesn't exist
+3. Drag and drop your `dataset_sharegpt.jsonl` file into it
+
+### Option B — SCP from your local machine
 
 ```bash
-cp .env.example .env
+# Run this on your LOCAL machine (not the pod)
+scp -P <port> ./output/dataset_sharegpt.jsonl root@<pod-ip>:/workspace/firecrawl_finetuning/output/
 ```
 
-Edit the `.env` file with your API keys:
+### Option C — runpodctl
 
 ```bash
-nano .env
+# Install runpodctl locally, then:
+runpodctl send ./output/dataset_sharegpt.jsonl
+# Copy the receive command it prints, then run it on the pod
 ```
 
-Add:
-
-```
-FIRECRAWL_API_KEY=fc-your-key-here
-OPENAI_API_KEY=sk-your-key-here
-```
-
-Save and exit (`Ctrl+O`, `Enter`, `Ctrl+X`).
-
----
-
-## Step 5 — Generate the Training Dataset
-
-Run the dataset generation pipeline. Replace the URL with the website you want to train on:
-
-```bash
-python main.py https://docs.example.com
-```
-
-For more control:
-
-```bash
-python main.py https://docs.example.com \
-  --max-pages 100 \
-  --qa-per-chunk 3 \
-  --chunk-size 2000 \
-  --concurrency 15 \
-  --multi-turn \
-  --output-dir ./output
-```
-
-When finished, verify your dataset:
+Verify the upload on the pod:
 
 ```bash
 wc -l ./output/dataset_sharegpt.jsonl
-# Should show the number of training examples
-
 head -1 ./output/dataset_sharegpt.jsonl | python -m json.tool
-# Should show a properly formatted ShareGPT entry
 ```
-
-> This step uses the OpenAI API (not the GPU). You can also run it locally and upload the JSONL file to the pod via JupyterLab's file browser.
 
 ---
 
-## Step 6 — Verify GPU Access
-
-Before training, confirm PyTorch can see the GPU:
+## Step 5 — Verify GPU Access
 
 ```bash
 python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}'); print(f'GPU: {torch.cuda.get_device_name(0)}')"
@@ -149,9 +114,9 @@ GPU: NVIDIA A40
 
 ---
 
-## Step 7 — Run Fine-Tuning
+## Step 6 — Run Fine-Tuning
 
-### Quick test run (10 steps)
+### Quick test (10 steps)
 
 Start with a short run to make sure everything works:
 
@@ -161,14 +126,13 @@ python finetuning.py \
   --max-steps 10
 ```
 
-### Full training run
+### Full training
 
 Once the test passes, run a full training:
 
 ```bash
 python finetuning.py \
   --dataset ./output/dataset_sharegpt.jsonl \
-  --model unsloth/Llama-3.2-1B-Instruct-bnb-4bit \
   --num-epochs 3 \
   --batch-size 2 \
   --gradient-accumulation 4 \
@@ -184,7 +148,7 @@ python finetuning.py \
 | Flag | Default | Description |
 |:-----|:--------|:------------|
 | `--dataset` | `./output/dataset_sharegpt.jsonl` | Path to ShareGPT JSONL file |
-| `--model` | `unsloth/Llama-3.2-1B-Instruct-bnb-4bit` | Base model (HF or Unsloth ID) |
+| `--model` | `unsloth/gpt-oss-20b-unsloth-bnb-4bit` | Base model (HF or Unsloth ID) |
 | `--max-seq-length` | `2048` | Max sequence length |
 | `--chat-template` | `chatml` | Chat template (chatml, llama, mistral, zephyr) |
 | `--lora-rank` | `16` | LoRA rank |
@@ -202,9 +166,7 @@ python finetuning.py \
 
 ---
 
-## Step 8 — Verify the Output
-
-After training completes, check the saved model:
+## Step 7 — Verify the Output
 
 ```bash
 ls ./finetuned_model/
@@ -222,17 +184,13 @@ special_tokens_map.json
 
 ---
 
-## Step 9 — Export and Download Your Model
+## Step 8 — Download Your Model
 
 ### Option A — Push to Hugging Face Hub
 
-Re-run finetuning with the `--push-to-hub` flag (or do it after training):
-
 ```bash
-# Login first
 huggingface-cli login
 
-# Run with push
 python finetuning.py \
   --dataset ./output/dataset_sharegpt.jsonl \
   --push-to-hub your-username/my-finetuned-model \
@@ -252,27 +210,25 @@ The GGUF file will be saved to `./finetuned_model_gguf/`.
 
 ### Option C — Download via JupyterLab
 
-1. Open JupyterLab in your browser
-2. Navigate to the `finetuned_model/` directory in the file browser
-3. Right-click files and select **Download**
+1. Navigate to `finetuned_model/` in the JupyterLab file browser
+2. Right-click files and select **Download**
 
-### Option D — Download via SCP
-
-From your **local machine**:
+### Option D — SCP to your local machine
 
 ```bash
+# Run on your LOCAL machine
 scp -P <port> root@<pod-ip>:/workspace/firecrawl_finetuning/finetuned_model/* ./my-local-model/
 ```
 
 ---
 
-## Step 10 — Stop Your Pod
+## Step 9 — Stop Your Pod
 
-Once you have downloaded or pushed your model, **stop the pod** to avoid charges:
+Once you have your model, **stop the pod** to avoid charges:
 
 1. Go to [RunPod Console > Pods](https://www.runpod.io/console/pods)
-2. Click the **Stop** button on your pod
-3. If you no longer need the volume storage, click **Terminate** to fully delete the pod
+2. Click **Stop** on your pod
+3. If you no longer need the volume, click **Terminate** to fully delete it
 
 > Stopped pods still incur volume storage charges ($0.20/GB/month). Terminated pods have no ongoing charges.
 
@@ -285,12 +241,11 @@ Once you have downloaded or pushed your model, **stop the pod** to avoid charges
 - Reduce `--batch-size` to `1`
 - Reduce `--max-seq-length` to `1024`
 - Increase `--gradient-accumulation` to compensate for smaller batch size
-- Use a smaller model (e.g. `unsloth/Llama-3.2-1B-Instruct-bnb-4bit`)
+- Use a smaller model (e.g. `unsloth/Llama-3.2-1B-Instruct-bnb-4bit` at ~4 GB VRAM)
 
 ### `unsloth` installation fails
 
 ```bash
-# Try installing with the CUDA-specific extras
 pip install unsloth
 # If that fails, install from source:
 pip install "unsloth @ git+https://github.com/unslothai/unsloth.git"
@@ -302,53 +257,47 @@ pip install "unsloth @ git+https://github.com/unslothai/unsloth.git"
 - Check that 4-bit quantization is enabled (default with the Unsloth bnb-4bit models)
 - Use `--gradient-accumulation` instead of larger `--batch-size` to stay within VRAM
 
-### Dataset file not found
-
-- Verify the dataset path: `ls ./output/dataset_sharegpt.jsonl`
-- If you generated the dataset locally, upload it via JupyterLab's file browser to `/workspace/firecrawl_finetuning/output/`
-
 ---
 
 ## Recommended Configurations
 
-### Small model, small dataset (< 500 examples)
+### Default — gpt-oss-20b (< 5000 examples)
 
 ```bash
 python finetuning.py \
-  --model unsloth/Llama-3.2-1B-Instruct-bnb-4bit \
   --num-epochs 3 \
   --batch-size 2 \
   --gradient-accumulation 4 \
   --lora-rank 16
 ```
 
-GPU: Any 16 GB+ GPU. Estimated time: 5–15 minutes.
+GPU: Any 16 GB+ GPU (14 GB VRAM with QLoRA). Training time: ~10–30 minutes.
 
-### Medium model, medium dataset (500–5000 examples)
+### Larger — gpt-oss-120b (5000+ examples)
 
 ```bash
 python finetuning.py \
-  --model unsloth/Llama-3.2-3B-Instruct-bnb-4bit \
-  --num-epochs 2 \
-  --batch-size 4 \
-  --gradient-accumulation 4 \
+  --model unsloth/gpt-oss-120b-unsloth-bnb-4bit \
+  --num-epochs 1 \
+  --batch-size 1 \
+  --gradient-accumulation 8 \
   --lora-rank 32 \
   --lora-alpha 32
 ```
 
-GPU: 24 GB+ (A5000, A40). Estimated time: 30–90 minutes.
+GPU: 80 GB (H100/A100 80GB). Training time: ~1–4 hours.
 
-### Large model, large dataset (5000+ examples)
+### Alternative — Llama 4 Scout (long context, 5000+ examples)
 
 ```bash
 python finetuning.py \
-  --model unsloth/Meta-Llama-3.1-8B-Instruct-bnb-4bit \
+  --model unsloth/Llama-4-Scout-17B-16E-Instruct-unsloth-bnb-4bit \
   --num-epochs 1 \
-  --batch-size 2 \
+  --batch-size 1 \
   --gradient-accumulation 8 \
   --lora-rank 32 \
   --lora-alpha 32 \
   --max-seq-length 4096
 ```
 
-GPU: 40 GB+ (A100). Estimated time: 1–4 hours.
+GPU: 80 GB (H100/A100 80GB, ~71 GB VRAM). Training time: ~1–4 hours.
