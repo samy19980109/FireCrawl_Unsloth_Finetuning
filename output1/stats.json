@@ -1,0 +1,21 @@
+{
+  "url": "https://reizindia.com/",
+  "pages_scraped": 242,
+  "total_chunks": 1061,
+  "raw_qa_pairs": 2122,
+  "removed_quality": 0,
+  "removed_quality_breakdown": {
+    "short_answer": 0,
+    "short_question": 0,
+    "meta_reference": 0
+  },
+  "removed_duplicates": 240,
+  "final_qa_pairs": 1882,
+  "multi_turn_conversations": 0,
+  "multi_turn_enabled": false,
+  "model": "gpt-4o-mini",
+  "qa_per_chunk": 2,
+  "chunk_size": 3000,
+  "concurrency": 10,
+  "dedup_threshold": 85
+}

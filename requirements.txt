@@ -1,0 +1,6 @@
+firecrawl
+openai
+python-dotenv
+tqdm
+pydantic
+rapidfuzz
