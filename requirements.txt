@@ -4,3 +4,7 @@ python-dotenv
 tqdm
 pydantic
 rapidfuzz
+unsloth
+trl
+datasets
+torch
